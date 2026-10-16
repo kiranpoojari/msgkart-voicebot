@@ -25,9 +25,9 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 
-from pipecat.services.sarvam.stt import SarvamRealtimeSTTService
-# from pipecat.services.sarvam.stt import SarvamSTTService
-# from pipecat.services.openrouter.llm import OpenRouterLLMService
+# Sarvam STT service
+from pipecat.services.sarvam.stt import SarvamSTTService
+
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.sarvam.tts import SarvamTTSService
 from pipecat.transcriptions.language import Language
@@ -39,7 +39,8 @@ from pipecat.transports.local.audio import (
 
 load_dotenv()
 
-#System prompt
+
+# System prompt
 SYSTEM_PROMPT = """
 You are a friendly admissions enquiry caller from
 Vishwa Engineering College, a fictional engineering college.
@@ -208,7 +209,6 @@ def get_api_keys():
     """Read and validate API keys required for testing."""
 
     sarvam_api_key = os.getenv("SARVAM_API_KEY")
-    # openrouter_api_key = os.getenv("OPENROUTER_API_KEY") #used this for testing
     openai_api_key = os.getenv("OPENAI_API_KEY")
 
     if not sarvam_api_key:
@@ -220,11 +220,11 @@ def get_api_keys():
         raise ValueError(
             "Please configure OPENAI_API_KEY in your .env file."
         )
+
     return sarvam_api_key, openai_api_key
 
 
-
-#language detection
+# Language detection
 def detect_language_choice(text: str):
     """
     Detect an explicit English or Hindi language preference.
@@ -318,20 +318,25 @@ class LanguageSwitchProcessor(FrameProcessor):
                 self.current_language = chosen_language
 
                 language_name = (
-                    "Hindi" if chosen_language == "hi"
+                    "Hindi"
+                    if chosen_language == "hi"
                     else "English"
                 )
-                print(f"TTS language changed to: {language_name}")
+
+                print(
+                    f"TTS language changed to: {language_name}"
+                )
+
         await self.push_frame(frame, direction)
 
 
 # Main application
 async def main():
     """Create and run the admissions voicebot."""
+
     sarvam_api_key, openai_api_key = get_api_keys()
 
-
-    #Set up audio input and output
+    # Set up audio input and output
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
             audio_in_enabled=True,
@@ -339,30 +344,24 @@ async def main():
         )
     )
 
-    #Set up speech recognition
-    stt = SarvamRealtimeSTTService(
-    api_key=sarvam_api_key,
-    settings=SarvamRealtimeSTTService.Settings(
-        model="saaras:v3-realtime",
-        mode="transcribe",
-        stream_type="fast",
-        language=None,
-        silence_duration_ms=700,
-    ),
-    endpointing="vad",
-    should_interrupt=True,
+    # Set up speech recognition
+    stt = SarvamSTTService(
+        api_key=sarvam_api_key,
+        settings=SarvamSTTService.Settings(
+            model="saaras:v3",
+            language=None,
+        ),
 )
 
-   
     # Set up the language model
     llm = OpenAILLMService(
         api_key=openai_api_key,
         settings=OpenAILLMService.Settings(
             model="gpt-4o-mini",
-    ),
-)
+        ),
+    )
 
-    #speech generation.
+    # Speech generation
     tts = SarvamTTSService(
         api_key=sarvam_api_key,
         settings=SarvamTTSService.Settings(
@@ -385,8 +384,7 @@ async def main():
         ]
     )
 
-
-    #conversation processing.
+    # Conversation processing
     user_aggregator, assistant_aggregator = (
         LLMContextAggregatorPair(
             context,
@@ -396,7 +394,7 @@ async def main():
         )
     )
 
-    #Build the voice pipeline
+    # Build the voice pipeline
     pipeline = Pipeline(
         [
             transport.input(),
@@ -410,7 +408,7 @@ async def main():
         ]
     )
 
-    #Run the pipeline
+    # Run the pipeline
     task = PipelineTask(pipeline)
 
     await task.queue_frames(
@@ -418,6 +416,7 @@ async def main():
     )
 
     runner = PipelineRunner()
+
     print(
         "Starting Vishwa Engineering College "
         "Admissions Voicebot..."
@@ -426,11 +425,11 @@ async def main():
     print("Supported languages: English and Hindi.")
     print("Using OpenAI for LLM.")
     print("Press Ctrl+C to stop the program.")
+
     await runner.run(task)
 
 
-
-# APPLICATION ENTRY POINT
+# Application entry point
 if __name__ == "__main__":
     try:
         asyncio.run(main())
