@@ -16,22 +16,20 @@ from pipecat.processors.frame_processor import (
 )
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+
 from pipecat.services.sarvam.stt import SarvamRealtimeSTTService
 # from pipecat.services.sarvam.stt import SarvamSTTService
 # from pipecat.services.openrouter.llm import OpenRouterLLMService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.sarvam.tts import SarvamTTSService
-
 from pipecat.transcriptions.language import Language
 
 from pipecat.transports.local.audio import (
@@ -39,15 +37,9 @@ from pipecat.transports.local.audio import (
     LocalAudioTransportParams,
 )
 
-
-# Load environment variables from .env.
 load_dotenv()
 
-
-# =========================================================
-# SYSTEM PROMPT
-# =========================================================
-
+#System prompt
 SYSTEM_PROMPT = """
 You are a friendly admissions enquiry caller from
 Vishwa Engineering College, a fictional engineering college.
@@ -211,15 +203,12 @@ GUARDRAILS
 """
 
 
-# =========================================================
-# API KEY VALIDATION
-# =========================================================
-
+# API configuration
 def get_api_keys():
     """Read and validate API keys required for testing."""
 
     sarvam_api_key = os.getenv("SARVAM_API_KEY")
-    # openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    # openrouter_api_key = os.getenv("OPENROUTER_API_KEY") #used this for testing
     openai_api_key = os.getenv("OPENAI_API_KEY")
 
     if not sarvam_api_key:
@@ -231,13 +220,11 @@ def get_api_keys():
         raise ValueError(
             "Please configure OPENAI_API_KEY in your .env file."
         )
-
     return sarvam_api_key, openai_api_key
 
-# =========================================================
-# LANGUAGE DETECTION
-# =========================================================
 
+
+#language detection
 def detect_language_choice(text: str):
     """
     Detect an explicit English or Hindi language preference.
@@ -250,7 +237,6 @@ def detect_language_choice(text: str):
 
     text_lower = text.lower().strip()
 
-    # Hindi written in Devanagari script.
     if re.search(r"[\u0900-\u097F]", text):
         return "hi"
 
@@ -285,10 +271,7 @@ def detect_language_choice(text: str):
     return None
 
 
-# =========================================================
-# SARVAM TTS LANGUAGE SWITCHING
-# =========================================================
-
+# TTS language switching
 async def set_tts_language(tts, language: str):
     """Update Sarvam TTS to use English or Hindi."""
 
@@ -338,23 +321,17 @@ class LanguageSwitchProcessor(FrameProcessor):
                     "Hindi" if chosen_language == "hi"
                     else "English"
                 )
-
                 print(f"TTS language changed to: {language_name}")
-
         await self.push_frame(frame, direction)
 
 
-# =========================================================
-# MAIN VOICEBOT
-# =========================================================
-
+# Main application
 async def main():
     """Create and run the admissions voicebot."""
-
     sarvam_api_key, openai_api_key = get_api_keys()
 
 
-    # 1. Configure microphone input and speaker output.
+    #Set up audio input and output
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
             audio_in_enabled=True,
@@ -362,7 +339,7 @@ async def main():
         )
     )
 
-    # 2. Real-time speech recognition with faster streaming.
+    #Set up speech recognition
     stt = SarvamRealtimeSTTService(
     api_key=sarvam_api_key,
     settings=SarvamRealtimeSTTService.Settings(
@@ -377,7 +354,7 @@ async def main():
 )
 
    
-    # 3. Generate responses using OpenAI.
+    # Set up the language model
     llm = OpenAILLMService(
         api_key=openai_api_key,
         settings=OpenAILLMService.Settings(
@@ -385,7 +362,7 @@ async def main():
     ),
 )
 
-    # 4. Convert the assistant's text into speech.
+    #speech generation.
     tts = SarvamTTSService(
         api_key=sarvam_api_key,
         settings=SarvamTTSService.Settings(
@@ -395,10 +372,11 @@ async def main():
         ),
     )
 
-    # 5. Detect the student's explicit language choice.
+
+    # Handle language selection
     language_switcher = LanguageSwitchProcessor(tts)
 
-    # 6. Initialize the conversation with the system prompt.
+    # Set up conversation context
     context = LLMContext(
         messages=[
             {
@@ -408,7 +386,8 @@ async def main():
         ]
     )
 
-    # 7. Create conversation aggregators and voice activity detection.
+
+    #conversation processing.
     user_aggregator, assistant_aggregator = (
         LLMContextAggregatorPair(
             context,
@@ -418,7 +397,7 @@ async def main():
         )
     )
 
-    # 8. Connect all components into the voice pipeline.
+    #Build the voice pipeline
     pipeline = Pipeline(
         [
             transport.input(),
@@ -432,7 +411,7 @@ async def main():
         ]
     )
 
-    # 9. Create and run the pipeline task.
+    #Run the pipeline
     task = PipelineTask(pipeline)
 
     await task.queue_frames(
@@ -440,24 +419,19 @@ async def main():
     )
 
     runner = PipelineRunner()
-
     print(
         "Starting Vishwa Engineering College "
         "Admissions Voicebot..."
     )
     print("Microphone input and speaker output are enabled.")
     print("Supported languages: English and Hindi.")
-    # print("Testing LLM through OpenRouter.")
     print("Using OpenAI for LLM.")
     print("Press Ctrl+C to stop the program.")
-
     await runner.run(task)
 
 
-# =========================================================
-# APPLICATION ENTRY POINT
-# =========================================================
 
+# APPLICATION ENTRY POINT
 if __name__ == "__main__":
     try:
         asyncio.run(main())
